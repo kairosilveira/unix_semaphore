@@ -27,6 +27,9 @@ void P(SEMAPHORE sem, int num);
 void V(SEMAPHORE sem, int num);
 key_t Creer_cle(char *nom_fichier);
 
+void lecteur_0();
+void lecteur_1();
+
 /************************************************
  *PROGRAMA PRINCIPAL***********************
  *****************************/
@@ -34,7 +37,7 @@ int main(int argc, char const *argv[])
 {
     int id_msg;
     int pid = getpid();
-    int fpid, ppid;
+    int pid_0, pid_1;
     dmsgbuf message, message_rvd;
     char msg_rvd[200];
 
@@ -77,33 +80,40 @@ int main(int argc, char const *argv[])
     creerSegment(2 * sizeof(BUF), cle_acces_mem);
     printf("cle: %d\n", cle);
 
-    if ((fpid = fork()) < 0)
+    if (pid_0 = fork()) // fazer o if de erro para os forks
     {
-        printf("Erreur pour créer le processus\n");
-    }
-    else if (fpid > 0)
-    {
-        /*père envoi le signal*/
-        for (int i = 0; i < 5; i++)
+        if (pid_1 = fork()) /*le pere*/
         {
             signal(SIGUSR1, handler_1);
             signal(SIGUSR2, handler_2);
-            pause();
-            // V(lect, 0);
-            // sleep(20);
-            // V(lect, 1);
-
-            // pause();
-            sleep(7);
-            printf("Donne du voie 1 : %d\n", Memptr[0].tampon[Memptr[0].n]);
-            printf("Donne du voie 2 : %d\n", Memptr[1].tampon[Memptr[1].n]);
+            for (int i = 0; i < 10; i++)
+            {
+                pause();
+                if (voie == 0)
+                {
+                    V(lect, 0);
+                }
+                else
+                {
+                    V(lect, 1);
+                }
+            }
+        }
+        else /*le premier fils*/
+        {
+            lecteur_0();
+            exit(0);
         }
     }
-    else
+    else /*la deuxieme fils*/
     {
-        /*fils*/
-        // pause();
+        lecteur_1();
+        exit(0);
     }
+
+    kill(pid_0, SIGKILL);
+    kill(pid_1, SIGKILL);
+    Detruire_sem(lect);
 
     return 0;
 }
@@ -242,12 +252,29 @@ void V(SEMAPHORE sem, int num)
 
 void handler_1(int n)
 {
-    printf("handler 1\n");
-    // printf("Donne du voie 1 : %d\n", Memptr[0].tampon[Memptr[0].n]);
+    // signal(SIGUSR1, handler_1);
+    voie = 0;
 }
 
 void handler_2(int n)
 {
-    printf("handler 2\n");
-    // printf("Donne du voie 2 : %d\n", Memptr[0].tampon[Memptr[0].n]);
+    // signal(SIGUSR2,handler_2);
+    voie = 1;
+}
+
+void lecteur_0()
+{
+    while (1)
+    {
+        P(lect, 0);
+        printf("Donne du voie 1 : %d\n", Memptr[0].tampon[Memptr[0].n]);
+    }
+}
+void lecteur_1()
+{
+    while (1)
+    {
+        P(lect, 1);
+        printf("Donne du voie 2 : %d\n", Memptr[1].tampon[Memptr[1].n]);
+    }
 }
