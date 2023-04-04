@@ -1,16 +1,25 @@
 #include "CL_include"
-// se leu, seu cu é meu
+
+/************************************************
+ *VARIAVEIS GLOBAIS***********************
+ *****************************/
 typedef int SEMAPHORE;
 BUF *Memptr;
 int shmid;
 char cle_acces_mem[200];
 int voie;
-key_t Creer_cle(char *nom_fichier);
 SEMAPHORE lect;
 key_t cle;
 
+/************************************************
+ *FUNÇÕES***********************
+ *****************************/
 int getIdMessagerie();
 void creerSegment(int size, char *name);
+
+void handler_1(int n);
+void handler_2(int n);
+
 SEMAPHORE Creer_sem(key_t key);
 void Detruire_sem(SEMAPHORE sem);
 void Changer_sem(SEMAPHORE sem, int val, int numero);
@@ -18,15 +27,16 @@ void P(SEMAPHORE sem, int num);
 void V(SEMAPHORE sem, int num);
 key_t Creer_cle(char *nom_fichier);
 
-void handler_1(int n);
-void handler_2(int n);
-
+/************************************************
+ *PROGRAMA PRINCIPAL***********************
+ *****************************/
 int main(int argc, char const *argv[])
 {
     int id_msg;
     int pid = getpid();
     int fpid, ppid;
     dmsgbuf message, message_rvd;
+    char msg_rvd[200];
 
     printf("pid: %d\n", pid);
 
@@ -34,18 +44,15 @@ int main(int argc, char const *argv[])
      *Connexion client-serveur***********************
      *****************************/
 
-    /*Obtendo msqid para conectar ao servidor*/
-    if ((id_msg = getIdMessagerie()) < 0)
+    if ((id_msg = getIdMessagerie()) < 0) /*Obtendo msqid para conectar ao servidor*/
     {
         printf("CL: Erreur getIdMessagerie %d\n", MSGerr);
     }
 
-    /*Definindo o tipo da mensagem como CONNECT*/
-    message.type = CONNECT;
+    message.type = CONNECT;          /*Definindo o tipo da mensagem como CONNECT*/
     sprintf(message.txt, "%d", pid); // transforma o PDI em uma string que é salva em message.txt
 
-    /*Envia mensagem ao servidor usando id_msg e message */
-    if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0)
+    if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0) /*Envia mensagem ao servidor usando id_msg e message */
     {
         printf("CL: erreur msgsnd :%d\n", MSGerr);
     }
@@ -82,6 +89,10 @@ int main(int argc, char const *argv[])
             signal(SIGUSR1, handler_1);
             signal(SIGUSR2, handler_2);
             pause();
+            // V(lect, 0);
+            // sleep(20);
+            // V(lect, 1);
+
             // pause();
             sleep(7);
             printf("Donne du voie 1 : %d\n", Memptr[0].tampon[Memptr[0].n]);
@@ -91,6 +102,7 @@ int main(int argc, char const *argv[])
     else
     {
         /*fils*/
+        // pause();
     }
 
     return 0;
@@ -121,11 +133,6 @@ void creerSegment(int size, char *name)
     clef = ftok(name, C_Shm);
     printf("clef: %d\n", clef);
     shmid = shmget(clef, size, 0);
-    /*if (Memptr ==(char)-1)
-     {
-             perror("attachement impossible") ;
-            exit(1) ;
-    }*/
 
     if (shmid == -1)
     {
@@ -135,14 +142,8 @@ void creerSegment(int size, char *name)
 
     /*attacher a la segment*/
     Memptr = (BUF *)shmat(shmid, 0, 0);
-    /*if (Memptr ==(char)-1)
-     {
-             perror("attachement impossible") ;
-            exit(1) ;
-    }*/
 
     printf("Tshmid =  %d \n", shmid);
-    //  printf("ce segment est associe a la clef %d \n",clef) ;
 }
 
 key_t Creer_cle(char *nom_fichier)
@@ -155,18 +156,6 @@ key_t Creer_cle(char *nom_fichier)
         exit(EXIT_FAILURE);
     }
     return cle;
-}
-
-void handler_1(int n)
-{
-    printf("handler 1\n");
-    // printf("Donne du voie 1 : %d\n", Memptr[0].tampon[Memptr[0].n]);
-}
-
-void handler_2(int n)
-{
-    printf("handler 2\n");
-    // printf("Donne du voie 2 : %d\n", Memptr[0].tampon[Memptr[0].n]);
 }
 
 /*****************************************************les fonctions des semaphores ****************************************/
@@ -247,4 +236,18 @@ void P(SEMAPHORE sem, int num)
 void V(SEMAPHORE sem, int num)
 {
     Changer_sem(sem, 1, num);
+}
+
+/*****************************************************les fonctions des signaux ****************************************/
+
+void handler_1(int n)
+{
+    printf("handler 1\n");
+    // printf("Donne du voie 1 : %d\n", Memptr[0].tampon[Memptr[0].n]);
+}
+
+void handler_2(int n)
+{
+    printf("handler 2\n");
+    // printf("Donne du voie 2 : %d\n", Memptr[0].tampon[Memptr[0].n]);
 }
