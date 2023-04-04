@@ -60,12 +60,18 @@ int main(int argc, char const *argv[])
         printf("CL: erreur msgsnd :%d\n", MSGerr);
     }
 
-    /*Recebe uma mensagem do servidor, e salva(CleClient) em message_rvd.txt*/
+    /************************************************
+     *Recebe uma mensagem do servidor, e salva(CleClient) em message_rvd.txt***********************
+     *****************************/
     if (msgrcv(id_msg, &message_rvd, L_MSG, pid, 0) < 0)
     {
         printf("CL:erreur msgrcv :%d\n", MSGerr);
     }
-    /*Enviando msg ACK para confirmar o recebimento da chave(CleClient)*/
+
+    /************************************************
+     *Enviando msg ACK para confirmar o recebimento da chave(CleClient)***********************
+     *****************************/
+
     message.type = ACK;
     sprintf(message.txt, "%d", pid);
     if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0)
@@ -252,13 +258,13 @@ void V(SEMAPHORE sem, int num)
 
 void handler_1(int n)
 {
-    // signal(SIGUSR1, handler_1);
+    signal(SIGUSR1, handler_1);
     voie = 0;
 }
 
 void handler_2(int n)
 {
-    // signal(SIGUSR2,handler_2);
+    signal(SIGUSR2,handler_2);
     voie = 1;
 }
 
