@@ -11,6 +11,9 @@ int voie;
 SEMAPHORE lect;
 key_t cle;
 
+int pfd_1[2];
+int pfd_2[2];
+
 /************************************************
  *FUNÇÕES***********************
  *****************************/
@@ -30,6 +33,9 @@ key_t Creer_cle(char *nom_fichier);
 void lecteur_0();
 void lecteur_1();
 
+void redacteur_1(int pfd_1[2]);
+void redacteur_2(int pfd_2[2]);
+
 /************************************************
  *PROGRAMA PRINCIPAL***********************
  *****************************/
@@ -37,9 +43,22 @@ int main(int argc, char const *argv[])
 {
     int id_msg;
     int pid = getpid();
-    int pid_0, pid_1;
+    int pid_lecteur0, pid_lecteur1;
+    int pid_redacteur1, pid_redacteur2;
     dmsgbuf message, message_rvd;
-    char msg_rvd[200];
+
+    /************************************************
+     *Definindo pipeline***********************
+     *****************************/
+    if (pipe(pfd_1) == -1)
+    {
+        perror("main : pipe(pfd_1)");
+    }
+
+    if (pipe(pfd_2) == -1)
+    {
+        perror("main : pipe(pfd_2)");
+    }
 
     printf("pid: %d\n", pid);
 
@@ -86,13 +105,27 @@ int main(int argc, char const *argv[])
     creerSegment(2 * sizeof(BUF), cle_acces_mem);
     printf("cle: %d\n", cle);
 
-    if (pid_0 = fork()) // fazer o if de erro para os forks
+    if ((pid_lecteur0 = fork())) // fazer o if de erro para os forks
     {
-        if (pid_1 = fork()) /*le pere*/
+        /*******criação dos redatores********/
+        if ((pid_redacteur1 = fork()) == 0)
+        {
+            redacteur_1(pfd_1);
+            exit(0);
+        }
+
+        if ((pid_redacteur2 = fork()) == 0)
+        {
+            redacteur_2(pfd_2);
+            exit(0);
+        }
+
+        if ((pid_lecteur1 = fork())) /*le pere*/
         {
             signal(SIGUSR1, handler_1);
             signal(SIGUSR2, handler_2);
-            for (int i = 0; i < 10; i++)
+
+            for (int i = 0; i < 50; i++)
             {
                 pause();
                 if (voie == 0)
@@ -117,8 +150,10 @@ int main(int argc, char const *argv[])
         exit(0);
     }
 
-    kill(pid_0, SIGKILL);
-    kill(pid_1, SIGKILL);
+    kill(pid_lecteur0, SIGKILL);
+    kill(pid_lecteur1, SIGKILL);
+    kill(pid_redacteur1, SIGKILL);
+    kill(pid_redacteur2, SIGKILL);
     Detruire_sem(lect);
 
     return 0;
@@ -264,23 +299,107 @@ void handler_1(int n)
 
 void handler_2(int n)
 {
-    signal(SIGUSR2,handler_2);
+    signal(SIGUSR2, handler_2);
     voie = 1;
 }
 
 void lecteur_0()
 {
+    int donnee;
+    close(pfd_1[0]);
+
     while (1)
     {
         P(lect, 0);
-        printf("Donne du voie 1 : %d\n", Memptr[0].tampon[Memptr[0].n]);
+        donnee = Memptr[0].tampon[Memptr[0].n];
+        // donnee = Memptr->tampon[Memptr->n];
+        // printf("Donne du voie 1(lecteur) : %d\n", donnee);
+        write(pfd_1[1], &donnee, sizeof(donnee));
     }
 }
 void lecteur_1()
 {
+    int donnee;
+    close(pfd_2[0]);
+
     while (1)
     {
         P(lect, 1);
-        printf("Donne du voie 2 : %d\n", Memptr[1].tampon[Memptr[1].n]);
+        donnee = Memptr[1].tampon[Memptr[1].n];
+        // printf("Donne du voie 2 (lecteur): %d\n", donnee);
+        write(pfd_2[1], &donnee, sizeof(donnee));
     }
 }
+
+/******************Redatores*******************************/
+void redacteur_1(int pfd_1[2])
+{
+    int donnee;
+    int i;
+
+    time_t t;
+    char *c_time;
+    char donnee_traitee[300];
+    char inter[12];
+
+    close(pfd_1[1]);
+    // close(pfd_driver[0]);
+
+    while (1)
+    {
+        sprintf(donnee_traitee, "%s", "\n\nBuffer 1:\n");
+        for (i = 0; i < 5; i++)
+        {
+            read(pfd_1[0], &donnee, sizeof(donnee));
+            time(&t);
+            c_time = ctime(&t);
+            sprintf(inter, "%d", donnee);
+
+            strcat(donnee_traitee, "date : ");
+            strcat(donnee_traitee, c_time);
+            strcat(donnee_traitee, "donnee : ");
+            strcat(donnee_traitee, inter);
+            strcat(donnee_traitee, "\n");
+            // printf("%steste=========\n", donnee_traitee);
+        }
+        printf("%s", donnee_traitee);
+        // write(pfd_driver[1], donnee_traitee, sizeof(donnee_traitee));
+    }
+}
+
+void redacteur_2(int pfd_2[2])
+{
+    int donnee;
+    int i;
+
+    time_t t;
+    char *c_time;
+    char donnee_traitee[300];
+    char inter[12];
+
+    close(pfd_2[1]);
+    // close(pfd_driver[0]);
+
+    while (1)
+    {
+        sprintf(donnee_traitee, "%s", "\n\nBuffer 2:\n");
+        for (i = 0; i < 5; i++)
+        {
+            read(pfd_2[0], &donnee, sizeof(donnee));
+            time(&t);
+            c_time = ctime(&t);
+            sprintf(inter, "%d", donnee);
+
+            strcat(donnee_traitee, "date : ");
+            strcat(donnee_traitee, c_time);
+            strcat(donnee_traitee, "donnee : ");
+            strcat(donnee_traitee, inter);
+            strcat(donnee_traitee, "\n");
+            // printf("%steste=========\n", donnee_traitee);
+        }
+        printf("%s", donnee_traitee);
+        // write(pfd_driver[1], donnee_traitee, sizeof(donnee_traitee));
+    }
+}
+// ipcs
+// ipcrm -a
