@@ -3,16 +3,27 @@
 /************************************************
  *VARIAVEIS GLOBAIS***********************
  *****************************/
-typedef int SEMAPHORE;
+/*memoire partage*/
 BUF *Memptr;
 int shmid;
 char cle_acces_mem[200];
 int voie;
-SEMAPHORE lect;
-key_t cle;
 
+/*Semaphore*/
+typedef int SEMAPHORE;
+SEMAPHORE lect;
+SEMAPHORE sem_driver;
+key_t cle;
+key_t cle_driver;
+
+/*pipe*/
 int pfd_1[2];
 int pfd_2[2];
+int pfd_driver[2];
+
+/*driver*/
+char buf[100];
+int nwritten;
 
 /************************************************
  *FUNÇÕES***********************
@@ -33,8 +44,8 @@ key_t Creer_cle(char *nom_fichier);
 void lecteur_0();
 void lecteur_1();
 
-void redacteur_1(int pfd_1[2]);
-void redacteur_2(int pfd_2[2]);
+void redacteur_1(int pfd_1[2], int pfd_driver[2]);
+void redacteur_2(int pfd_2[2], int pfd_driver[2]);
 
 /************************************************
  *PROGRAMA PRINCIPAL***********************
@@ -45,6 +56,7 @@ int main(int argc, char const *argv[])
     int pid = getpid();
     int pid_lecteur0, pid_lecteur1;
     int pid_redacteur1, pid_redacteur2;
+    int pid_driver;
     dmsgbuf message, message_rvd;
 
     /************************************************
@@ -56,6 +68,11 @@ int main(int argc, char const *argv[])
     }
 
     if (pipe(pfd_2) == -1)
+    {
+        perror("main : pipe(pfd_2)");
+    }
+
+    if (pipe(pfd_driver) == -1)
     {
         perror("main : pipe(pfd_2)");
     }
@@ -99,33 +116,78 @@ int main(int argc, char const *argv[])
     }
     printf("Message reveiced: %s\n", message_rvd.txt);
 
+/*****************************************************la creation des semaphores ****************************************/
     cle = Creer_cle(message_rvd.txt);
-    strcpy(cle_acces_mem, message_rvd.txt);
+    cle_driver = Creer_cle("CL.c");
+
     lect = Creer_sem(cle);
+    sem_driver = Creer_sem(cle_driver);
+
+/*****************************************************la creation de segment de memoire partage ****************************************/
+    strcpy(cle_acces_mem, message_rvd.txt);
     creerSegment(2 * sizeof(BUF), cle_acces_mem);
     printf("cle: %d\n", cle);
 
+
+
+    /************************************************
+     *Driver***********************
+     *****************************/
+    if((pid_driver=fork())==-1){
+                perror("Erro FORK");
+        exit(EXIT_FAILURE);
+    }else if (pid_driver == 0){
+        // Processo filho: executa o programa "./drive"
+        close(pfd_driver[1]); // Fecha a extremidade de escrita do pipe
+
+        // Redireciona a entrada padrão para a extremidade de leitura do pipe
+        if (dup2(pfd_driver[0], STDIN_FILENO) == -1) {
+            perror("Erro DUP2");
+            exit(EXIT_FAILURE);
+        }
+
+        // Fecha a extremidade de leitura do pipe, pois a entrada padrão agora aponta para ela
+        close(pfd_driver[0]);
+
+        // Executa o programa "./drive"
+        execlp("./drive", "./drive", (char *)NULL);
+
+        // Se a execução chegar aqui, houve um erro ao executar "./drive"
+        perror("Erro EXEC");
+        exit(EXIT_FAILURE);
+    }
+
+
+
+    /************************************************
+     *Redacteur***********************
+     *****************************/
     if ((pid_lecteur0 = fork())) // fazer o if de erro para os forks
     {
         /*******criação dos redatores********/
         if ((pid_redacteur1 = fork()) == 0)
         {
-            redacteur_1(pfd_1);
+            redacteur_1(pfd_1, pfd_driver);
             exit(0);
         }
 
         if ((pid_redacteur2 = fork()) == 0)
         {
-            redacteur_2(pfd_2);
+            redacteur_2(pfd_2, pfd_driver);
             exit(0);
         }
+
+/************************************************
+     *Lecteur***********************
+     *****************************/
+
 
         if ((pid_lecteur1 = fork())) /*le pere*/
         {
             signal(SIGUSR1, handler_1);
             signal(SIGUSR2, handler_2);
 
-            for (int i = 0; i < 50; i++)
+            for (int i = 0; i < 500; i++)
             {
                 pause();
                 if (voie == 0)
@@ -154,7 +216,9 @@ int main(int argc, char const *argv[])
     kill(pid_lecteur1, SIGKILL);
     kill(pid_redacteur1, SIGKILL);
     kill(pid_redacteur2, SIGKILL);
+    kill(pid_driver, SIGKILL);
     Detruire_sem(lect);
+    Detruire_sem(sem_driver);
 
     return 0;
 }
@@ -302,6 +366,7 @@ void handler_2(int n)
     signal(SIGUSR2, handler_2);
     voie = 1;
 }
+/*****************************************************les fonctions des lecteurs ****************************************/
 
 void lecteur_0()
 {
@@ -331,23 +396,26 @@ void lecteur_1()
     }
 }
 
-/******************Redatores*******************************/
-void redacteur_1(int pfd_1[2])
+/*****************************************************les fonctions des Redatores ****************************************/
+/*************************************************/
+
+void redacteur_1(int pfd_1[2], int pfd_driver[2])
 {
     int donnee;
     int i;
 
     time_t t;
     char *c_time;
-    char donnee_traitee[300];
+    char donnee_traitee[10000];
     char inter[12];
+    donnee_traitee[0] = 0;
 
     close(pfd_1[1]);
-    // close(pfd_driver[0]);
+    
 
     while (1)
     {
-        sprintf(donnee_traitee, "%s", "\n\nBuffer 1:\n");
+        sprintf(donnee_traitee, "%s", "Buffer 1:\n");
         for (i = 0; i < 5; i++)
         {
             read(pfd_1[0], &donnee, sizeof(donnee));
@@ -360,29 +428,33 @@ void redacteur_1(int pfd_1[2])
             strcat(donnee_traitee, "donnee : ");
             strcat(donnee_traitee, inter);
             strcat(donnee_traitee, "\n");
-            // printf("%steste=========\n", donnee_traitee);
         }
-        printf("%s", donnee_traitee);
-        // write(pfd_driver[1], donnee_traitee, sizeof(donnee_traitee));
+
+        //printf("%s", donnee_traitee);
+        V(sem_driver,0);
+        close(pfd_driver[0]);
+        write(pfd_driver[1], donnee_traitee, strlen(donnee_traitee)+1);
+        P(sem_driver,0);
+        strcpy(donnee_traitee, "");
     }
 }
 
-void redacteur_2(int pfd_2[2])
+void redacteur_2(int pfd_2[2], int pfd_driver[2])
 {
     int donnee;
     int i;
 
     time_t t;
     char *c_time;
-    char donnee_traitee[300];
+    char donnee_traitee[10000];
+    donnee_traitee[0] = 0;
     char inter[12];
 
     close(pfd_2[1]);
-    // close(pfd_driver[0]);
 
     while (1)
     {
-        sprintf(donnee_traitee, "%s", "\n\nBuffer 2:\n");
+        sprintf(donnee_traitee, "%s", "Buffer 2:\n");
         for (i = 0; i < 5; i++)
         {
             read(pfd_2[0], &donnee, sizeof(donnee));
@@ -395,11 +467,12 @@ void redacteur_2(int pfd_2[2])
             strcat(donnee_traitee, "donnee : ");
             strcat(donnee_traitee, inter);
             strcat(donnee_traitee, "\n");
-            // printf("%steste=========\n", donnee_traitee);
         }
-        printf("%s", donnee_traitee);
-        // write(pfd_driver[1], donnee_traitee, sizeof(donnee_traitee));
+
+        V(sem_driver,0);
+        close(pfd_driver[0]);
+        write(pfd_driver[1], donnee_traitee, strlen(donnee_traitee)+1);
+        P(sem_driver,0);
+        strcpy(donnee_traitee, "");
     }
 }
-// ipcs
-// ipcrm -a
