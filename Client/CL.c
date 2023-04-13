@@ -1,8 +1,9 @@
 #include "CL_include"
 
-/************************************************
- *VARIAVEIS GLOBAIS***********************
- *****************************/
+/**************************************
+**********VARIABLES GLOBALES**********
+**************************************/
+
 /*memoire partage*/
 BUF *Memptr;
 int shmid;
@@ -25,9 +26,11 @@ int pfd_driver[2];
 char buf[100];
 int nwritten;
 
-/************************************************
- *FUNÇÕES***********************
- *****************************/
+/*************************************
+**************FONCTIONS***************
+*************************************/
+void handle_alarm(int sig);
+
 int getIdMessagerie();
 void creerSegment(int size, char *name);
 
@@ -47,9 +50,9 @@ void lecteur_1();
 void redacteur_1(int pfd_1[2], int pfd_driver[2]);
 void redacteur_2(int pfd_2[2], int pfd_driver[2]);
 
-/************************************************
- *PROGRAMA PRINCIPAL***********************
- *****************************/
+/*************************************
+*********PROGRAMME PRINCIPAL**********
+*************************************/
 int main(int argc, char const *argv[])
 {
     int id_msg;
@@ -57,11 +60,27 @@ int main(int argc, char const *argv[])
     int pid_lecteur0, pid_lecteur1;
     int pid_redacteur1, pid_redacteur2;
     int pid_driver;
+    int time_exe = 25;
     dmsgbuf message, message_rvd;
 
-    /************************************************
-     *Definindo pipeline***********************
-     *****************************/
+    /***************************************
+     **DÉFINITION DE LA DURÉE DU PROGRAMME***
+     ***************************************/
+    if (argc > 1)
+    {
+        time_exe = atoi(argv[1]);
+    }
+
+    printf("******************************************\n");
+    printf("!!! Lancement client (pendant %d s) !!!\n", time_exe);
+    printf("******************************************\n\n");
+
+    signal(SIGALRM, handle_alarm);
+    alarm(time_exe);
+
+    /**************************************
+    ********DÉFINITION DES PIPELINES********
+    **************************************/
     if (pipe(pfd_1) == -1)
     {
         perror("main : pipe(pfd_1)");
@@ -77,37 +96,33 @@ int main(int argc, char const *argv[])
         perror("main : pipe(pfd_2)");
     }
 
+    /**************************************
+    *******CONNEXION CLIENT-SERVEUR*******
+    **************************************/
     printf("pid: %d\n", pid);
-
-    /************************************************
-     *Connexion client-serveur***********************
-     *****************************/
-
-    if ((id_msg = getIdMessagerie()) < 0) /*Obtendo msqid para conectar ao servidor*/
+    if ((id_msg = getIdMessagerie()) < 0) // Obtenir msqid pour se connecter au serveur
     {
         printf("CL: Erreur getIdMessagerie %d\n", MSGerr);
     }
 
-    message.type = CONNECT;          /*Definindo o tipo da mensagem como CONNECT*/
-    sprintf(message.txt, "%d", pid); // transforma o PDI em uma string que é salva em message.txt
-
-    if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0) /*Envia mensagem ao servidor usando id_msg e message */
+    message.type = CONNECT;                                       // Définition du type de message comme CONNECT
+    sprintf(message.txt, "%d", pid);                              // transforme le PID en une chaîne qui est enregistrée dans message.txt
+    if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0) // Envoyer un message au serveur en utilisant id_msg et message
     {
         printf("CL: erreur msgsnd :%d\n", MSGerr);
     }
 
-    /************************************************
-     *Recebe uma mensagem do servidor, e salva(CleClient) em message_rvd.txt***********************
-     *****************************/
+    /**********************************************************************************
+    **REÇOIT UN MESSAGE DU SERVEUR, ET L'ENREGISTRE (CleClient) DANS message_rvd.txt**
+    **********************************************************************************/
     if (msgrcv(id_msg, &message_rvd, L_MSG, pid, 0) < 0)
     {
         printf("CL:erreur msgrcv :%d\n", MSGerr);
     }
 
-    /************************************************
-     *Enviando msg ACK para confirmar o recebimento da chave(CleClient)***********************
-     *****************************/
-
+    /**************************************************************
+    **ENVOI DU MESSAGE ACK POUR CONFIRMER LA RÉCEPTION DE LA CLÉ(CleClient)**
+    **************************************************************/
     message.type = ACK;
     sprintf(message.txt, "%d", pid);
     if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0)
@@ -116,55 +131,59 @@ int main(int argc, char const *argv[])
     }
     printf("Message reveiced: %s\n", message_rvd.txt);
 
-/*****************************************************la creation des semaphores ****************************************/
+    /**************************************
+     ******LA CREATION DES SEMAPHORES******
+     **************************************/
     cle = Creer_cle(message_rvd.txt);
     cle_driver = Creer_cle("CL.c");
 
     lect = Creer_sem(cle);
     sem_driver = Creer_sem(cle_driver);
 
-/*****************************************************la creation de segment de memoire partage ****************************************/
+    /*********************************************
+     **LA CREATION DE SEGMENT DE MEMOIRE PARTAGE***
+     *********************************************/
     strcpy(cle_acces_mem, message_rvd.txt);
     creerSegment(2 * sizeof(BUF), cle_acces_mem);
     printf("cle: %d\n", cle);
 
-
-
-    /************************************************
-     *Driver***********************
-     *****************************/
-    if((pid_driver=fork())==-1){
-                perror("Erro FORK");
+    /**************************************
+    ****************DRIVER****************
+    **************************************/
+    if ((pid_driver = fork()) == -1)
+    {
+        perror("Erro FORK");
         exit(EXIT_FAILURE);
-    }else if (pid_driver == 0){
-        // Processo filho: executa o programa "./drive"
-        close(pfd_driver[1]); // Fecha a extremidade de escrita do pipe
+    }
+    else if (pid_driver == 0)
+    {
+        // Processus fils : exécute le programme "./drive"
+        close(pfd_driver[1]); // Ferme l'extrémité d'écriture du pipe
 
-        // Redireciona a entrada padrão para a extremidade de leitura do pipe
-        if (dup2(pfd_driver[0], STDIN_FILENO) == -1) {
+        // Rediriger l'entrée standard vers l'extrémité de lecture du pipe
+        if (dup2(pfd_driver[0], STDIN_FILENO) == -1)
+        {
             perror("Erro DUP2");
             exit(EXIT_FAILURE);
         }
 
-        // Fecha a extremidade de leitura do pipe, pois a entrada padrão agora aponta para ela
+        // Ferme l'extrémité de lecture du pipe car l'entrée standard pointe maintenant vers elle
         close(pfd_driver[0]);
 
-        // Executa o programa "./drive"
+        // Exécute le programme "./drive"
         execlp("./drive", "./drive", (char *)NULL);
 
-        // Se a execução chegar aqui, houve um erro ao executar "./drive"
+        // Si l'exécution arrive ici, une erreur s'est produite lors de l'exécution de "./drive"
         perror("Erro EXEC");
         exit(EXIT_FAILURE);
     }
 
-
-
-    /************************************************
-     *Redacteur***********************
-     *****************************/
-    if ((pid_lecteur0 = fork())) // fazer o if de erro para os forks
+    /*************************************
+    **************REDACTEUR***************
+    *************************************/
+    if ((pid_lecteur0 = fork())) //
     {
-        /*******criação dos redatores********/
+
         if ((pid_redacteur1 = fork()) == 0)
         {
             redacteur_1(pfd_1, pfd_driver);
@@ -177,17 +196,16 @@ int main(int argc, char const *argv[])
             exit(0);
         }
 
-/************************************************
-     *Lecteur***********************
-     *****************************/
+        /*************************************
+        ***************LECTEUR****************
+        *************************************/
 
-
-        if ((pid_lecteur1 = fork())) /*le pere*/
+        if ((pid_lecteur1 = fork()))
         {
             signal(SIGUSR1, handler_1);
             signal(SIGUSR2, handler_2);
 
-            for (int i = 0; i < 500; i++)
+            for (int i = 0; i < time_exe; i++)
             {
                 pause();
                 if (voie == 0)
@@ -206,7 +224,7 @@ int main(int argc, char const *argv[])
             exit(0);
         }
     }
-    else /*la deuxieme fils*/
+    else /*le deuxieme fils*/
     {
         lecteur_1();
         exit(0);
@@ -223,6 +241,15 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
+/******************************************************
+**FUNCTION POUR GERER LE TEMPS D'EXECUTION DU CLIENT**
+******************************************************/
+void handle_alarm(int sig)
+{
+    printf("Fin d'execution du Client!!!\n");
+    exit(0);
+}
+
 int getIdMessagerie()
 {
     key_t key;
@@ -233,10 +260,9 @@ int getIdMessagerie()
     return msqid;
 }
 
-/*************************/
-/****** creer un cle pour accedre a la memoire*******/
-/*************************/
-
+/********************************************************
+**FUNCTION POUR CREER UN CLE POUR ACCEDRE A LA MEMOIRE**
+********************************************************/
 void creerSegment(int size, char *name)
 {
 
@@ -273,7 +299,9 @@ key_t Creer_cle(char *nom_fichier)
     return cle;
 }
 
-/*****************************************************les fonctions des semaphores ****************************************/
+/**************************************
+*****LES FONCTIONS DES SEMAPHORES*****
+**************************************/
 SEMAPHORE Creer_sem(key_t key)
 {
     SEMAPHORE sem;
@@ -353,8 +381,9 @@ void V(SEMAPHORE sem, int num)
     Changer_sem(sem, 1, num);
 }
 
-/*****************************************************les fonctions des signaux ****************************************/
-
+/*************************************
+******LES FONCTIONS DES SIGNAUX*******
+*************************************/
 void handler_1(int n)
 {
     signal(SIGUSR1, handler_1);
@@ -366,8 +395,10 @@ void handler_2(int n)
     signal(SIGUSR2, handler_2);
     voie = 1;
 }
-/*****************************************************les fonctions des lecteurs ****************************************/
 
+/*************************************
+*****LES FONCTIONS DES LECTEURS ******
+*************************************/
 void lecteur_0()
 {
     int donnee;
@@ -378,7 +409,6 @@ void lecteur_0()
         P(lect, 0);
         donnee = Memptr[0].tampon[Memptr[0].n];
         // donnee = Memptr->tampon[Memptr->n];
-        // printf("Donne du voie 1(lecteur) : %d\n", donnee);
         write(pfd_1[1], &donnee, sizeof(donnee));
     }
 }
@@ -396,9 +426,9 @@ void lecteur_1()
     }
 }
 
-/*****************************************************les fonctions des Redatores ****************************************/
-/*************************************************/
-
+/*************************************
+*****LES FONCTIONS DES REDATEURS******
+*************************************/
 void redacteur_1(int pfd_1[2], int pfd_driver[2])
 {
     int donnee;
@@ -411,7 +441,6 @@ void redacteur_1(int pfd_1[2], int pfd_driver[2])
     donnee_traitee[0] = 0;
 
     close(pfd_1[1]);
-    
 
     while (1)
     {
@@ -430,11 +459,11 @@ void redacteur_1(int pfd_1[2], int pfd_driver[2])
             strcat(donnee_traitee, "\n");
         }
 
-        //printf("%s", donnee_traitee);
-        V(sem_driver,0);
+        // printf("%s", donnee_traitee);
+        V(sem_driver, 0);
         close(pfd_driver[0]);
-        write(pfd_driver[1], donnee_traitee, strlen(donnee_traitee)+1);
-        P(sem_driver,0);
+        write(pfd_driver[1], donnee_traitee, strlen(donnee_traitee) + 1);
+        P(sem_driver, 0);
         strcpy(donnee_traitee, "");
     }
 }
@@ -469,10 +498,10 @@ void redacteur_2(int pfd_2[2], int pfd_driver[2])
             strcat(donnee_traitee, "\n");
         }
 
-        V(sem_driver,0);
+        V(sem_driver, 0);
         close(pfd_driver[0]);
-        write(pfd_driver[1], donnee_traitee, strlen(donnee_traitee)+1);
-        P(sem_driver,0);
+        write(pfd_driver[1], donnee_traitee, strlen(donnee_traitee) + 1);
+        P(sem_driver, 0);
         strcpy(donnee_traitee, "");
     }
 }
