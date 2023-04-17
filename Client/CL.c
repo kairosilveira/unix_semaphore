@@ -44,8 +44,8 @@ void P(SEMAPHORE sem, int num);
 void V(SEMAPHORE sem, int num);
 key_t Creer_cle(char *nom_fichier);
 
-void lecteur_0();
 void lecteur_1();
+void lecteur_2();
 
 void redacteur_1(int pfd_1[2], int pfd_driver[2]);
 void redacteur_2(int pfd_2[2], int pfd_driver[2]);
@@ -57,7 +57,7 @@ int main(int argc, char const *argv[])
 {
     int id_msg;
     int pid = getpid();
-    int pid_lecteur0, pid_lecteur1;
+    int pid_lecteur1, pid_lecteur2;
     int pid_redacteur1, pid_redacteur2;
     int pid_driver;
     int time_exe = 25;
@@ -71,9 +71,13 @@ int main(int argc, char const *argv[])
         time_exe = atoi(argv[1]);
     }
 
-    printf("******************************************\n");
-    printf("!!! Lancement client (pendant %d s) !!!\n", time_exe);
-    printf("******************************************\n\n");
+    printf("*******************************************\n");
+    printf("Projet CLIENT - SERVEUR Unix IESE 4\n\n");
+    printf("Auteurs : MACHADO William ET SILVEIRA Kairo\n\n");
+    printf("*******************************************\n\n");
+    printf("!!! Lancement client (pendant %d s) !!!\n\n", time_exe);
+    printf("Pid du client = %d\n\n", pid);
+    printf("*****************connecte******************\n");
 
     signal(SIGALRM, handle_alarm);
     alarm(time_exe);
@@ -83,23 +87,23 @@ int main(int argc, char const *argv[])
     **************************************/
     if (pipe(pfd_1) == -1)
     {
-        perror("main : pipe(pfd_1)");
+        perror("CL : Erreur_Creer_pipe(pfd_1)");
     }
 
     if (pipe(pfd_2) == -1)
     {
-        perror("main : pipe(pfd_2)");
+        perror("CL : Erreur_Creer_pipe(pfd_2)");
     }
 
     if (pipe(pfd_driver) == -1)
     {
-        perror("main : pipe(pfd_2)");
+        perror("CL : Erreur_Creer_pipe(pfd_2)");
     }
 
     /**************************************
     *******CONNEXION CLIENT-SERVEUR*******
     **************************************/
-    printf("pid: %d\n", pid);
+    
     if ((id_msg = getIdMessagerie()) < 0) // Obtenir msqid pour se connecter au serveur
     {
         printf("CL: Erreur getIdMessagerie %d\n", MSGerr);
@@ -109,7 +113,7 @@ int main(int argc, char const *argv[])
     sprintf(message.txt, "%d", pid);                              // transforme le PID en une chaîne qui est enregistrée dans message.txt
     if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0) // Envoyer un message au serveur en utilisant id_msg et message
     {
-        printf("CL: erreur msgsnd :%d\n", MSGerr);
+        printf("CL: Erreur msgsnd :%d\n", MSGerr);
     }
 
     /**********************************************************************************
@@ -117,7 +121,7 @@ int main(int argc, char const *argv[])
     **********************************************************************************/
     if (msgrcv(id_msg, &message_rvd, L_MSG, pid, 0) < 0)
     {
-        printf("CL:erreur msgrcv :%d\n", MSGerr);
+        printf("CL: Erreur msgrcv :%d\n", MSGerr);
     }
 
     /**************************************************************
@@ -127,9 +131,9 @@ int main(int argc, char const *argv[])
     sprintf(message.txt, "%d", pid);
     if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0)
     {
-        printf("CL: erreur msgsnd :%d\n", MSGerr);
+        printf("CL: Erreur msgsnd :%d\n", MSGerr);
     }
-    printf("Message reveiced: %s\n", message_rvd.txt);
+    // printf("Message reveiced: %s\n", message_rvd.txt);
 
     /**************************************
      ******LA CREATION DES SEMAPHORES******
@@ -145,14 +149,14 @@ int main(int argc, char const *argv[])
      *********************************************/
     strcpy(cle_acces_mem, message_rvd.txt);
     creerSegment(2 * sizeof(BUF), cle_acces_mem);
-    printf("cle: %d\n", cle);
+    // printf("cle: %d\n", cle);
 
     /**************************************
     ****************DRIVER****************
     **************************************/
     if ((pid_driver = fork()) == -1)
     {
-        perror("Erro FORK");
+        perror("CL: Erreur_Creer_driver");
         exit(EXIT_FAILURE);
     }
     else if (pid_driver == 0)
@@ -163,7 +167,7 @@ int main(int argc, char const *argv[])
         // Rediriger l'entrée standard vers l'extrémité de lecture du pipe
         if (dup2(pfd_driver[0], STDIN_FILENO) == -1)
         {
-            perror("Erro DUP2");
+            perror("CL: Erreur_DUP2");
             exit(EXIT_FAILURE);
         }
 
@@ -174,23 +178,37 @@ int main(int argc, char const *argv[])
         execlp("./drive", "./drive", (char *)NULL);
 
         // Si l'exécution arrive ici, une erreur s'est produite lors de l'exécution de "./drive"
-        perror("Erro EXEC");
+        perror("CL: Erreur_EXEC");
         exit(EXIT_FAILURE);
     }
 
     /*************************************
     **************REDACTEUR***************
     *************************************/
-    if ((pid_lecteur0 = fork())) //
+    if ( (pid_lecteur1 = fork()) == -1 )
     {
-
-        if ((pid_redacteur1 = fork()) == 0)
+      perror("CL: Erreur_Creer_Lecteur_1");
+      exit(EXIT_FAILURE);
+    } 
+    else if (pid_lecteur1 != 0)
+    {
+        if ((pid_redacteur1 = fork()) == -1)
+        {
+             perror("CL: Erreur_Creer_Redacteur_1");
+             exit(EXIT_FAILURE);
+        } 
+        else if (pid_redacteur1 == 0)
         {
             redacteur_1(pfd_1, pfd_driver);
             exit(0);
         }
 
-        if ((pid_redacteur2 = fork()) == 0)
+        if ((pid_redacteur2 = fork()) == -1)
+        {
+             perror("CL: Erreur_Creer_Redacteur_2");
+             exit(EXIT_FAILURE);
+        } 
+        else if (pid_redacteur2 == 0)
         {
             redacteur_2(pfd_2, pfd_driver);
             exit(0);
@@ -200,7 +218,12 @@ int main(int argc, char const *argv[])
         ***************LECTEUR****************
         *************************************/
 
-        if ((pid_lecteur1 = fork()))
+        if ((pid_lecteur2 = fork()) == -1)
+        {
+             perror("CL: Erreur_Creer_Lecteur_2");
+             exit(EXIT_FAILURE);
+        } 
+        else if (pid_lecteur2 != 0)
         {
             signal(SIGUSR1, handler_1);
             signal(SIGUSR2, handler_2);
@@ -220,24 +243,25 @@ int main(int argc, char const *argv[])
         }
         else /*le premier fils*/
         {
-            lecteur_0();
+            lecteur_1();
             exit(0);
         }
     }
     else /*le deuxieme fils*/
     {
-        lecteur_1();
+        lecteur_2();
         exit(0);
     }
 
-    kill(pid_lecteur0, SIGKILL);
     kill(pid_lecteur1, SIGKILL);
+    kill(pid_lecteur2, SIGKILL);
     kill(pid_redacteur1, SIGKILL);
     kill(pid_redacteur2, SIGKILL);
     kill(pid_driver, SIGKILL);
     Detruire_sem(lect);
     Detruire_sem(sem_driver);
 
+    printf("****************deconnecte*****************\n");
     return 0;
 }
 
@@ -272,7 +296,7 @@ void creerSegment(int size, char *name)
     /* L'instruction ftok(name,(key_t) cle) permet de construire
        une cle identifiant le segment */
     clef = ftok(name, C_Shm);
-    printf("clef: %d\n", clef);
+    //printf("clef : %d\n", clef);
     shmid = shmget(clef, size, 0);
 
     if (shmid == -1)
@@ -284,7 +308,7 @@ void creerSegment(int size, char *name)
     /*attacher a la segment*/
     Memptr = (BUF *)shmat(shmid, 0, 0);
 
-    printf("Tshmid =  %d \n", shmid);
+    printf("ptr tampon : %d \n", shmid);
 }
 
 key_t Creer_cle(char *nom_fichier)
@@ -399,7 +423,7 @@ void handler_2(int n)
 /*************************************
 *****LES FONCTIONS DES LECTEURS ******
 *************************************/
-void lecteur_0()
+void lecteur_1()
 {
     int donnee;
     close(pfd_1[0]);
@@ -412,7 +436,7 @@ void lecteur_0()
         write(pfd_1[1], &donnee, sizeof(donnee));
     }
 }
-void lecteur_1()
+void lecteur_2()
 {
     int donnee;
     close(pfd_2[0]);
@@ -437,27 +461,30 @@ void redacteur_1(int pfd_1[2], int pfd_driver[2])
     time_t t;
     char *c_time;
     char donnee_traitee[10000];
-    char inter[12];
+    char inter_1[12];
+    char inter_2[12];
     donnee_traitee[0] = 0;
 
     close(pfd_1[1]);
 
     while (1)
     {
-        sprintf(donnee_traitee, "%s", "Buffer 1:\n");
         for (i = 0; i < 5; i++)
         {
             read(pfd_1[0], &donnee, sizeof(donnee));
             time(&t);
             c_time = ctime(&t);
-            sprintf(inter, "%d", donnee);
+            sprintf(inter_1, "%d", donnee);
+            sprintf(inter_2, "%d", i);
 
-            strcat(donnee_traitee, "date : ");
+            strcat(donnee_traitee, "Donnee no : ");
+            strcat(donnee_traitee, inter_2);
+            strcat(donnee_traitee, " de la voie 2 : ");
+            strcat(donnee_traitee, inter_1);          
+            strcat(donnee_traitee, " le ");
             strcat(donnee_traitee, c_time);
-            strcat(donnee_traitee, "donnee : ");
-            strcat(donnee_traitee, inter);
-            strcat(donnee_traitee, "\n");
         }
+            strcat(donnee_traitee, "\n");
 
         // printf("%s", donnee_traitee);
         V(sem_driver, 0);
@@ -477,26 +504,30 @@ void redacteur_2(int pfd_2[2], int pfd_driver[2])
     char *c_time;
     char donnee_traitee[10000];
     donnee_traitee[0] = 0;
-    char inter[12];
+    char inter_1[12];
+    char inter_2[12];
 
     close(pfd_2[1]);
 
     while (1)
     {
-        sprintf(donnee_traitee, "%s", "Buffer 2:\n");
         for (i = 0; i < 5; i++)
         {
             read(pfd_2[0], &donnee, sizeof(donnee));
             time(&t);
             c_time = ctime(&t);
-            sprintf(inter, "%d", donnee);
+            sprintf(inter_1, "%d", donnee);
+            sprintf(inter_2, "%d", i);
 
-            strcat(donnee_traitee, "date : ");
+            strcat(donnee_traitee, "Donnee no : ");
+            strcat(donnee_traitee, inter_2);
+            strcat(donnee_traitee, " de la voie 1 : ");
+            strcat(donnee_traitee, inter_1);          
+            strcat(donnee_traitee, " le ");
             strcat(donnee_traitee, c_time);
-            strcat(donnee_traitee, "donnee : ");
-            strcat(donnee_traitee, inter);
-            strcat(donnee_traitee, "\n");
         }
+        
+        strcat(donnee_traitee, "\n");
 
         V(sem_driver, 0);
         close(pfd_driver[0]);

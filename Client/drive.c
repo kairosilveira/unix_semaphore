@@ -7,13 +7,13 @@ int main()
 {
     char buf[BUF_SIZE];
 
-    printf("Je suis dans le DRIVE\n");
+    printf("\nDebut de reception des donnees\n");
     strcat(buf, " ");
 
     while (1)
     {
         read(STDIN_FILENO, buf, BUF_SIZE);
-        printf("\n\nMessage reçu: \n%s", buf);
+        printf("\n%s", buf);
     }
 
     return 0;
