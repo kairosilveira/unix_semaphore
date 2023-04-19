@@ -1,13 +1,13 @@
 CC = gcc
 CFLAGS = -Wall
 
-all: CL drive
+all: CL driver
 
 CL: CL.c
 	$(CC) $(CFLAGS) CL.c -o CL
 
 drive: drive.c
-	$(CC) $(CFLAGS) drive.c -o drive
+	$(CC) $(CFLAGS) driver.c -o driver
 
 clean:
-	rm -f CL drive
+	rm -f CL driver

@@ -73,7 +73,7 @@ int main(int argc, char const *argv[])
 
     printf("*******************************************\n");
     printf("Projet CLIENT - SERVEUR Unix IESE 4\n\n");
-    printf("Auteurs : MACHADO William ET SILVEIRA Kairo\n\n");
+    printf("Auteurs : MACHADO William et ALVES SILVEIRA Kairo\n\n");
     printf("*******************************************\n\n");
     printf("!!! Lancement client (pendant %d s) !!!\n\n", time_exe);
     printf("Pid du client = %d\n\n", pid);
@@ -124,9 +124,9 @@ int main(int argc, char const *argv[])
         printf("CL: Erreur msgrcv :%d\n", MSGerr);
     }
 
-    /**************************************************************
+    /************************************************************************
     **ENVOI DU MESSAGE ACK POUR CONFIRMER LA RÉCEPTION DE LA CLÉ(CleClient)**
-    **************************************************************/
+    *************************************************************************/
     message.type = ACK;
     sprintf(message.txt, "%d", pid);
     if (msgsnd(id_msg, &message, strlen(message.txt) + 1, 0) < 0)
@@ -175,7 +175,7 @@ int main(int argc, char const *argv[])
         close(pfd_driver[0]);
 
         // Exécute le programme "./drive"
-        execlp("./drive", "./drive", (char *)NULL);
+        execlp("./driver", "./driver", (char *)NULL);
 
         // Si l'exécution arrive ici, une erreur s'est produite lors de l'exécution de "./drive"
         perror("CL: Erreur_EXEC");
@@ -190,7 +190,7 @@ int main(int argc, char const *argv[])
       perror("CL: Erreur_Creer_Lecteur_1");
       exit(EXIT_FAILURE);
     } 
-    else if (pid_lecteur1 != 0)
+    else if (pid_lecteur1 > 0)
     {
         if ((pid_redacteur1 = fork()) == -1)
         {

@@ -1,6 +1,6 @@
 #include "CL_include"
 
-/* drive.c */
+/* driver.c */
 #define BUF_SIZE 10000
 
 int main()
