@@ -26,6 +26,8 @@ int pfd_driver[2];
 char buf[100];
 int nwritten;
 
+int pid= getpid();
+
 /*************************************
 **************FONCTIONS***************
 *************************************/
@@ -56,12 +58,12 @@ void redacteur_2(int pfd_2[2], int pfd_driver[2]);
 int main(int argc, char const *argv[])
 {
     int id_msg;
-    int pid = getpid();
     int pid_lecteur1, pid_lecteur2;
     int pid_redacteur1, pid_redacteur2;
     int pid_driver;
     int time_exe = 25;
     dmsgbuf message, message_rvd;
+
 
     /***************************************
      **DÉFINITION DE LA DURÉE DU PROGRAMME***
@@ -78,7 +80,6 @@ int main(int argc, char const *argv[])
     printf("!!! Lancement client (pendant %d s) !!!\n\n", time_exe);
     printf("Pid du client = %d\n\n", pid);
     printf("*****************connecte******************\n");
-
     signal(SIGALRM, handle_alarm);
     alarm(time_exe);
 
@@ -315,7 +316,7 @@ key_t Creer_cle(char *nom_fichier)
 {
     key_t cle;
 
-    if ((cle = ftok(nom_fichier, '0')) == -1)
+    if ((cle = ftok(nom_fichier, pid)) == -1)
     {
         perror("Creer_cle");
         exit(EXIT_FAILURE);
